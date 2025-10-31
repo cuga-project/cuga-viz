@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@uiw/react-markdown-preview':
-        specifier: ^5.1.4
+        specifier: ^5.1.5
         version: 5.1.5(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       cytoscape:
         specifier: ^3.31.1
@@ -27,10 +27,10 @@ importers:
         specifier: ^19.0.0
         version: 19.2.0(react@19.2.0)
       react-router-dom:
-        specifier: ^7.2.0
+        specifier: ^7.5.2
         version: 7.9.5(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       recharts:
-        specifier: ^2.15.1
+        specifier: ^2.15.2
         version: 2.15.4(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
     devDependencies:
       '@eslint/js':

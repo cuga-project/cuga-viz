@@ -1090,80 +1090,25 @@ async def assist(query: AssistQuery):
             if not json_path.exists():
                 raise HTTPException(status_code=404, detail=f"JSON file not found for ID: {query.id}")
 
-            # Read the JSON file
-            with open(json_path, "r") as f:
-                data = json.load(f)
-
-            # Filter out 'image_before' and 'observation' keys from steps
-            filtered_data = filter_step_keys(data)
-
-            # Process the question with the LLM using the filtered data
-            question = query.query
-            context = json.dumps(filtered_data, indent=2)
-
-            # Call your AI model with the question and context
-            llm = None
-            try:
-                from langchain_ibm import WatsonxLLM
-
-                llm = WatsonxLLM()
-            except ImportError:
-                logger.error("langchain_ibm not installed, LLM functionality will be disabled.")
-
-            if llm:
-                response = llm.invoke(
-                    f"Given a trajectory of a task execution in multi agent system the task either succeeded or failed your goal is to answer question on the trajectory. Context: {context}\n\nQuestion: {question}\n Make sure to cite your answers from context"
-                )
-                return JSONResponse(
-                    content={"response": response.content},
-                    headers={
-                        "Cache-Control": "no-cache, no-store, must-revalidate",
-                        "Pragma": "no-cache",
-                        "Expires": "0",
-                    },
-                )
-            else:
-                return JSONResponse(
-                    content={
-                        "response": "LLM functionality is not available. Please install langchain_ibm package."
-                    },
-                    headers={
-                        "Cache-Control": "no-cache, no-store, must-revalidate",
-                        "Pragma": "no-cache",
-                        "Expires": "0",
-                    },
-                )
+            # LLM functionality has been disabled
+            return JSONResponse(
+                content={"response": "LLM functionality is not available."},
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+            )
         else:
-            # If no ID is provided, just process the question
-            llm = None
-            try:
-                from langchain_ibm import WatsonxLLM
-
-                llm = WatsonxLLM()
-            except ImportError:
-                logger.error("langchain_ibm not installed, LLM functionality will be disabled.")
-
-            if llm:
-                response = llm.invoke(query.query)
-                return JSONResponse(
-                    content={"response": response.content},
-                    headers={
-                        "Cache-Control": "no-cache, no-store, must-revalidate",
-                        "Pragma": "no-cache",
-                        "Expires": "0",
-                    },
-                )
-            else:
-                return JSONResponse(
-                    content={
-                        "response": "LLM functionality is not available. Please install langchain_ibm package."
-                    },
-                    headers={
-                        "Cache-Control": "no-cache, no-store, must-revalidate",
-                        "Pragma": "no-cache",
-                        "Expires": "0",
-                    },
-                )
+            # If no ID is provided, LLM functionality is disabled
+            return JSONResponse(
+                content={"response": "LLM functionality is not available."},
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing question: {str(e)}")
 
