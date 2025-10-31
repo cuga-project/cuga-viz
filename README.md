@@ -56,6 +56,90 @@ Drill down into individual steps with comprehensive views of observations, actio
    uv pip install -e .
    ```
 
+### Quick Start: Using the Tracker
+
+The `ActivityTracker` is a singleton that helps you log experiment trajectories and results. Here's a quick example:
+
+```python
+from dashboard.activity_tracker import ActivityTracker, Step
+
+# Get the tracker instance (singleton)
+tracker = ActivityTracker()
+
+# Optionally set a custom base directory for experiments
+tracker.set_base_dir("./my_experiments")
+
+# Start an experiment with a list of task IDs
+experiment_folder = tracker.start_experiment(
+    task_ids=["task_001", "task_002", "task_003"],
+    experiment_name="my_experiment",
+    description="Testing agent behavior on specific tasks"
+)
+
+# For each task, reset and collect data
+for task_id in ["task_001", "task_002", "task_003"]:
+    # Reset tracker for new task
+    tracker.reset(intent="Complete the task", task_id=task_id)
+    
+    # Collect prompts during execution
+    tracker.collect_prompt(role="user", value="What should I do?")
+    tracker.collect_prompt(role="assistant", value="Let me help you...")
+    
+    # Collect steps as your agent performs actions
+    # Example with string name
+    step = Step(
+        name="navigate_to_page",
+        data="Navigated to https://example.com"
+    )
+    tracker.collect_step(step)
+    
+    # Example with JSON string name
+    step = Step(
+        name='{"action": "click", "element": "button#submit"}',
+        data="Clicked submit button"
+    )
+    tracker.collect_step(step)
+    
+    # Track token usage
+    tracker.collect_tokens_usage(count=150)
+    
+    # Collect images if needed
+    tracker.collect_image("base64_encoded_image_data")
+    
+    # Collect score after evaluation
+    tracker.collect_score(score=1.0)
+    
+    # Finish the task with results
+    tracker.finish_task(
+        task_id=task_id,
+        site="example.com",
+        intent="Complete the task",
+        agent_answer="Task completed successfully",
+        eval="Perfect execution",
+        score=1.0,
+        exception=False,
+        num_steps=len(tracker.steps),
+        agent_v="v1.0.0"
+    )
+
+# View experiment statistics
+stats = tracker.get_statistics()
+print(f"Total tasks: {stats['total_tasks']}")
+print(f"Average score: {stats.get('average_score', 0)}")
+```
+
+**Key Methods:**
+- `start_experiment(task_ids, experiment_name, description)` - Create a new experiment
+- `reset(intent, task_id)` - Reset tracker for a new task
+- `collect_prompt(role, value)` - Log prompts/conversations
+- `collect_step(step)` - Log agent actions and observations
+- `collect_score(score)` - Record task score
+- `collect_tokens_usage(count)` - Track token consumption
+- `collect_image(img)` - Store screenshots/images
+- `finish_task(...)` - Complete a task and update results
+
+The tracker automatically saves trajectory data to JSON files and updates experiment results in CSV/JSON format, which can then be visualized in the CugaViz dashboard.
+
 ### Running the Application
 
 #### Option 1: Full Development Mode
@@ -64,8 +148,8 @@ Drill down into individual steps with comprehensive views of observations, actio
    ```bash
    cd server
    uv run cuga-viz start /path/to/your/logs
-   # Or for experiments mode:
-   uv run cuga-viz run /path/to/your/experiments
+   # Or for experiments mode (using the my_experiments directory from the example above):
+   uv run cuga-viz run ./my_experiments
    ```
 
 2. **Start the frontend** (in a separate terminal):
@@ -86,6 +170,8 @@ The application will be available at `http://localhost:5173` (frontend) and `htt
    ```bash
    cd server
    uv run cuga-viz start /path/to/your/logs
+   # Or for experiments mode (using the my_experiments directory from the example above):
+   uv run cuga-viz run ./my_experiments
    ```
 
 The application will open automatically in your browser.
@@ -98,8 +184,8 @@ CugaViz provides a powerful CLI for launching the visualization server:
 # Start dashboard for trajectory logs
 uv run cuga-viz start /path/to/logs [--port 8989]
 
-# Start experiments manager
-uv run cuga-viz run /path/to/experiments [--port 8988]
+# Start experiments manager (using the my_experiments directory from the example above)
+uv run cuga-viz run ./my_experiments [--port 8988]
 
 # Show usage examples
 uv run cuga-viz examples
