@@ -1,3 +1,10 @@
+#!/usr/bin/env bash
+
+cd server || exit 1
+
+echo "Syncing dependencies..."
+uv sync --dev
+
 echo "Running ruff check..."
 if ! uv run ruff check; then
     echo "❌ Ruff check failed!"
