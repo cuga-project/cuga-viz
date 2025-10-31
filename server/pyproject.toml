@@ -1,6 +1,6 @@
 [project]
 name = "cugaviz"
-version = "0.0.0"
+version = "0.0.1"
 description = "CugaViz - Visualization tool for CUGA experiments"
 readme = "README.md"
 requires-python = ">=3.12"
