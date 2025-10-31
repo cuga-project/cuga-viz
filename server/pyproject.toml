@@ -1,0 +1,39 @@
+[project]
+name = "cugaviz"
+version = "0.1.0"
+description = "CugaViz - Visualization tool for CUGA experiments"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.115.11",
+    "pandas>=2.2.3",
+    "typer",
+    "rich>=13.5.0",
+    "uvicorn>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "loguru>=0.7.3",
+]
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dashboard*"]
+
+[tool.setuptools.package-data]
+dashboard = [
+    "static/**/*",
+    "videos/**/*",
+    "assets/**/*",
+    "templates/**/*",
+    "assets/**/*",
+    "*.html",
+    "*.css",
+    "*.js",
+    "*.json"
+]
+
+[project.scripts]
+cuga-viz = "dashboard.cli:app"
