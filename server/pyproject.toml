@@ -3,7 +3,7 @@ name = "cugaviz"
 version = "0.0.1"
 description = "CugaViz - Visualization tool for CUGA experiments"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10,<3.14"
 dependencies = [
     "fastapi[standard]>=0.115.11",
     "pandas>=2.2.3",
