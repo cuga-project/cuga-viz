@@ -1,7 +1,9 @@
-cd ../src   
+#!/bin/sh
+set -eu
+
+cd "$(dirname "$0")/.."
 pnpm run build
-cd ../server
-rm -rf ./dashboard/static
-cp -r ../dist/ ./dashboard/static
-cp -r ../dist/assets/ ./dashboard/assets
+rm -rf server/dashboard/static
+cp -R dist server/dashboard/static
+cd server
 uv pip install -e .

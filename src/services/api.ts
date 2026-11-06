@@ -1,28 +1,32 @@
+import type { ExperimentPage, ResultRow } from "../utils/results";
+
 /**
  * Fetches trajectory data from the API for a given task ID
  * @param {string} taskId - ID of the task to fetch
  * @returns {Promise<Object>} - The trajectory data
  */
 
-export async function fetchTrajectoryData(taskId: string, experimentName?: string) {
+export async function fetchTrajectoryData(taskId: string, experimentName?: string, signal?: AbortSignal) {
   try {
     const timestamp = Date.now();
     const path = experimentName ? `/data/${encodeURIComponent(experimentName)}/${encodeURIComponent(taskId)}.json` : `/data/${encodeURIComponent(taskId)}.json`;
-    const response = await fetch(`${path}?t=${timestamp}`);
+    const response = await fetch(`${path}?t=${timestamp}`, { signal });
     if (!response.ok) {
       throw new Error(`Failed to fetch trajectory data: ${response.status} ${response.statusText}`);
     }
     return await response.json();
   } catch (error) {
-    console.error("Error fetching trajectory data:", error);
+    if (!signal?.aborted) console.error("Error fetching trajectory data:", error);
     throw error;
   }
 }
 
-export async function fetchDataTable(experimentName?: string) {
+export async function fetchDataTable(experimentName?: string, signal?: AbortSignal): Promise<{
+  data: ResultRow[]; columns: string[]; columnConfig: Record<string, unknown>;
+}> {
   try {
     const query = experimentName ? `?experiment_name=${encodeURIComponent(experimentName)}` : "";
-    const response = await fetch(`/api/get_data_table${query}`);
+    const response = await fetch(`/api/get_data_table${query}`, { signal });
 
     if (!response.ok) {
       throw new Error(`Error fetching data table: ${response.status}`);
@@ -36,20 +40,20 @@ export async function fetchDataTable(experimentName?: string) {
       // Legacy API response - just data array
       return {
         data: jsonResponse,
-        columns: jsonResponse.length > 0 ? Object.keys(jsonResponse[0]) : [],
+        columns: [...new Set<string>(jsonResponse.flatMap(Object.keys))],
         columnConfig: {}, // No column config in this case
       };
     } else {
       // New API response format with both data and column config
       return {
         data: jsonResponse.data || [],
-        columns: jsonResponse.columns || (jsonResponse.data?.length > 0 ? Object.keys(jsonResponse.data[0]) : []),
+        columns: jsonResponse.columns || [...new Set<string>((jsonResponse.data || []).flatMap(Object.keys))],
         columnConfig: jsonResponse.columnConfig || {},
       };
     }
   } catch (error) {
-    console.error("Error in fetchDataTable:", error);
-    return { data: [], columns: [], columnConfig: {} };
+    if (!signal?.aborted) console.error("Error in fetchDataTable:", error);
+    throw error;
   }
 }
 
@@ -151,7 +155,9 @@ export const echoQuestion = async (question: string, id: string) => {
  * @param {string} search - Search term to filter experiments (default: "")
  * @returns {Promise<Object>} - The experiments data
  */
-export async function fetchLoggedExperiments(page: number = 1, per_page: number = 15, search: string = "") {
+export async function fetchLoggedExperiments(
+  page = 1, per_page = 15, search = "", signal?: AbortSignal, names: string[] = [],
+): Promise<ExperimentPage> {
   try {
     const params = new URLSearchParams({
       page: page.toString(),
@@ -159,7 +165,8 @@ export async function fetchLoggedExperiments(page: number = 1, per_page: number 
       search: search,
     });
 
-    const response = await fetch(`/api/experiments/logged?${params}`);
+    names.forEach((name) => params.append("name", name));
+    const response = await fetch(`/api/experiments/logged?${params}`, { signal });
 
     if (!response.ok) {
       throw new Error(`Failed to fetch logged experiments: ${response.status} ${response.statusText}`);
@@ -167,7 +174,7 @@ export async function fetchLoggedExperiments(page: number = 1, per_page: number 
 
     return await response.json();
   } catch (error) {
-    console.error("Error fetching logged experiments:", error);
+    if (!signal?.aborted) console.error("Error fetching logged experiments:", error);
     throw error;
   }
 }
@@ -277,7 +284,7 @@ export async function deleteExperiment(experimentNames: string[]) {
  */
 export async function downloadExperiment(experimentName: string) {
   try {
-    const response = await fetch(`/api/experiments/${experimentName}/download`);
+    const response = await fetch(`/api/experiments/${encodeURIComponent(experimentName)}/download`);
 
     if (!response.ok) {
       throw new Error(`Failed to download experiment: ${response.status} ${response.statusText}`);
@@ -297,7 +304,7 @@ export async function downloadExperiment(experimentName: string) {
  */
 export async function fetchUncompletedTasks(experimentName: string) {
   try {
-    const response = await fetch(`/api/experiments/${experimentName}/tasks/uncompleted`);
+    const response = await fetch(`/api/experiments/${encodeURIComponent(experimentName)}/tasks/uncompleted`);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch uncompleted tasks: ${response.status} ${response.statusText}`);
@@ -317,7 +324,7 @@ export async function fetchUncompletedTasks(experimentName: string) {
  */
 export async function fetchFailedTasks(experimentName: string) {
   try {
-    const response = await fetch(`/api/experiments/${experimentName}/tasks/failed`);
+    const response = await fetch(`/api/experiments/${encodeURIComponent(experimentName)}/tasks/failed`);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch failed tasks: ${response.status} ${response.statusText}`);

@@ -35,15 +35,13 @@ def get_server_path():
         return "dashboard.server"
 
 
-def _open_browser(type: Literal["dashboard", "experiments"] = "dashboard", delay: int = 2):
+def _open_browser(view: Literal["dashboard", "experiments"], port: int, delay: int = 2):
     """Opens the dashboard URL in a separate thread with delay."""
 
     def open_with_delay():
         time.sleep(delay)  # Wait for server to start
-        url = (
-            "http://localhost:8989/dashboard" if type == "dashboard" else "http://localhost:8988/experiments"
-        )
-        console.print(f"[bold blue]Opening {type} in browser:[/] {url}")
+        url = f"http://localhost:{port}/{view}"
+        console.print(f"[bold blue]Opening {view} in browser:[/] {url}")
         try:
             browser = webbrowser.get('chrome')
             browser.open(url)
@@ -80,7 +78,7 @@ def start(
         # Run the server using python
         if server_path.endswith(".py"):
             console.print(f"[bold blue]Running server from:[/] {server_path}")
-            _open_browser("dashboard")
+            _open_browser("dashboard", port)
             subprocess.run(
                 [sys.executable, server_path, "--data_dir", logs_abs_path, "--port", str(port)],
                 check=True,
@@ -88,7 +86,7 @@ def start(
         else:
             # Run as module
             console.print(f"[bold blue]Running server module:[/] {server_path}")
-            _open_browser("dashboard")
+            _open_browser("dashboard", port)
             subprocess.run(
                 [sys.executable, "-m", server_path, "--data_dir", logs_abs_path, "--port", str(port)],
                 check=True,
@@ -133,7 +131,7 @@ def run(
         # Run the server using python with experiments_dir parameter
         if server_path.endswith(".py"):
             console.print(f"[bold blue]Running experiments server from:[/] {server_path}")
-            _open_browser("experiments")
+            _open_browser("experiments", port)
             subprocess.run(
                 [sys.executable, server_path, "--experiments_dir", experiments_abs_path, "--port", str(port)],
                 check=True,
@@ -142,7 +140,7 @@ def run(
         else:
             # Run as module
             console.print(f"[bold blue]Running experiments server module:[/] {server_path}")
-            _open_browser("experiments")
+            _open_browser("experiments", port)
             subprocess.run(
                 [
                     sys.executable,

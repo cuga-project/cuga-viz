@@ -4,8 +4,12 @@ import { JSX, useState } from "react";
 import { parseJsonSafely } from "../utils/renderHelpers";
 // Assuming ExpandableText is not used in the provided snippet, otherwise, it should be imported.
 // import ExpandableText from "./ExpandableText";
-import MarkdownPreview from "@uiw/react-markdown-preview";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import ReactClipboard from "react-clipboardjs-copy";
+import { Braces, MessagesSquare } from "lucide-react";
+import { Button } from "./ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import "./StepView.css";
 
 interface StepViewProps {
@@ -14,14 +18,10 @@ interface StepViewProps {
   config: any;
   expandedImages: any;
   toggleImage: (imageId: string) => void;
-  isCollapsed?: boolean;
-  onToggleCollapse?: () => void;
-  }
+}
 
-function StepView({ step, index, config, expandedImages, toggleImage, isCollapsed = false, onToggleCollapse }: StepViewProps) {
+function StepView({ step, index, config, expandedImages, toggleImage }: StepViewProps) {
   const [expanded, setExpanded] = useState(false);
-  const [showJsonPopup, setShowJsonPopup] = useState(false);
-  const [showJsonPopupPrompts, setShowJsonPopupPrompts] = useState(false);
 
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["interesting-" + index]));
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
@@ -30,7 +30,6 @@ function StepView({ step, index, config, expandedImages, toggleImage, isCollapse
 
   const stepConfig = config[step.name] ||
     config["default"] || {
-      backgroundColor: "var(--color-background)",
       expandable: true,
     };
 
@@ -67,12 +66,11 @@ function StepView({ step, index, config, expandedImages, toggleImage, isCollapse
 
     return (
       <div className="collapsible-image-container">
-        <img
+        <button type="button" className="image-trigger" onClick={() => toggleImage(imageId)} aria-expanded={isExpanded}><img
           src={src}
           alt={alt}
           className={`collapsible-image ${isExpanded ? "expanded" : "collapsed"}`}
-          onClick={() => toggleImage(imageId)}
-        />
+        /></button>
         <div className="image-toggle-text">{isExpanded ? "Click to collapse" : "Click to expand"}</div>
       </div>
     );
@@ -91,24 +89,11 @@ function StepView({ step, index, config, expandedImages, toggleImage, isCollapse
     return hasMarkdownSyntax;
   };
 
-  const showMarkdown = (content: string, backgroundColor = "var(--color-background-dark)"): JSX.Element => {
-    return (
-      <div className="markdown-content" data-color-mode="dark">
-        <MarkdownPreview
-          source={content}
-          style={{
-            backgroundColor,
-            padding: "16px",
-            borderRadius: "8px",
-            border: "1px solid var(--color-border)",
-          }}
-          wrapperElement={{
-            "data-color-mode": "dark",
-          }}
-        />
-      </div>
-    );
-  };
+  const showMarkdown = (content: string): JSX.Element => (
+    <div className="markdown-content">
+      <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
+    </div>
+  );
 
   const renderInterestingKeys = (jsonData: any, interestingKeysConfig: string[]) => {
     if (!jsonData || typeof jsonData !== "object" || !interestingKeysConfig || interestingKeysConfig.length === 0) {
@@ -141,8 +126,8 @@ function StepView({ step, index, config, expandedImages, toggleImage, isCollapse
       <div className="interesting-keys-container">
         <div className="interesting-keys-header">
           <div className="interesting-keys-title">
-            <span className="interesting-keys-icon">✨</span>
-            <span className="interesting-keys-label">Interesting keys ({foundKeys.length})</span>
+            <span className="interesting-keys-icon" aria-hidden="true">✦</span>
+            <span className="interesting-keys-label">Highlighted fields ({foundKeys.length})</span>
           </div>
           {/* <div className="interesting-keys-controls">
             <button onClick={() => toggleSection(sectionId)} className="interesting-keys-btn">
@@ -235,29 +220,6 @@ function StepView({ step, index, config, expandedImages, toggleImage, isCollapse
             ))}
           </div>
         )}
-      </div>
-    );
-  };
-
-  const JsonPopupModal = ({ jsonData, onClose }: { jsonData: any; onClose: () => void }) => {
-    if (!jsonData) return null;
-    return (
-      <div className="json-popup-overlay" onClick={onClose}>
-        <div className="json-popup-modal" onClick={(e) => e.stopPropagation()}>
-          <div className="json-popup-header">
-            <div className="json-popup-title">
-              <span className="json-popup-icon">📋</span>
-              <h3>Complete JSON Data</h3>
-            </div>
-            <button onClick={onClose} className="json-popup-close">
-              ×
-            </button>
-          </div>
-          <div className="json-popup-content">
-            {/* Use "popup" as the expansionContextId for the JSON popup */}
-            {renderKeyValues(jsonData, 0, 10, "popup", "popup")}
-          </div>
-        </div>
       </div>
     );
   };
@@ -489,86 +451,66 @@ function StepView({ step, index, config, expandedImages, toggleImage, isCollapse
     );
   };
 
-  const renderTextData = (text: string, currentStepConfig: any) => {
-    const showExpand = currentStepConfig.expandable && text.length > 200;
+  const renderTextData = (value: unknown) => {
+    const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    const showExpand = text.length > 300;
     return (
       <div className="text-data-container">
-        <div>
-          <pre className="text-data-content">
-            {text.substring(0, 300)}
-            {showExpand && <span style={{ display: expanded ? "inline" : "none" }}>{text.substring(300)}</span>}
-          </pre>
-          {showExpand && (
-            <button onClick={toggleExpand} className="text-expand-btn">
-              {expanded ? "Collapse" : "Expand"}
-            </button>
-          )}
-        </div>
+        <pre className="text-data-content">{showExpand && !expanded ? text.slice(0, 300) + "…" : text}</pre>
+        {showExpand && <Button variant="outline" size="sm" onClick={toggleExpand}>{expanded ? "Collapse" : "Expand"}</Button>}
       </div>
     );
   };
 
-  const renderJSONData = (text: string, currentStepConfig: any) => {
-    const json_text = parseJsonSafely(text);
+  const data = parseJsonSafely(step.data) ?? step.data;
+  const prompts = parseJsonSafely(step.prompts) ?? step.prompts;
+  const highlights = stepConfig.interesting_keys && renderInterestingKeys(data, stepConfig.interesting_keys);
+
+  function payloadDialog(title, payload, Icon, label) {
     return (
-      <div>
-        {currentStepConfig.interesting_keys &&
-          json_text &&
-          renderInterestingKeys(json_text, currentStepConfig.interesting_keys)}
-        {/* For main data rendering, use "main" as the expansionContextId. */}
-        {!currentStepConfig.interesting_keys && json_text && renderKeyValues(json_text, 0, 5, "main", "main")}
-        {!json_text && text && showMarkdown(text, "var(--color-background-dark)")}
-      </div>
+      <Dialog>
+        <DialogTrigger asChild><Button variant="outline" size="sm"><Icon />{label}</Button></DialogTrigger>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>Step {index + 1} · {step.name}</DialogDescription></DialogHeader>
+          <div className="step-payload max-h-[65vh] overflow-auto">
+            {payload == null || payload === "" ? <p className="text-sm text-muted-foreground">No data recorded.</p> :
+              renderKeyValues(payload, 0, 10, "popup", "popup")}
+          </div>
+        </DialogContent>
+      </Dialog>
     );
-  };
+  }
 
   return (
     <div className="step-container">
-      <h3
-        className="step-name"
-        style={{
-          background: `linear-gradient(135deg, ${
-            stepConfig.backgroundColor || "var(--color-primary)"
-          }, var(--color-primary-light))`,
-          cursor: onToggleCollapse ? "pointer" : "default",
-        }}
-        onClick={onToggleCollapse}
-      >
-        <span className="step-icon">{isCollapsed ? "▶" : "⚡"}</span>Step {index + 1}: {step.name}
-        <div className="interesting-keys-controls" style={{ float: "right" }} onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => setShowJsonPopupPrompts(true)} className="interesting-keys-btn">
-            Show Prompts 🔍
-          </button>
-          <button onClick={() => setShowJsonPopup(true)} className="interesting-keys-btn">
-            Show JSON 🔍
-          </button>
+      <div className="step-name">
+        <h3>{step.name}</h3>
+        <div className="step-actions">
+          {payloadDialog("Recorded prompts", prompts, MessagesSquare, "Prompts")}
+          {payloadDialog("Recorded step data", data, Braces, "JSON")}
         </div>
-      </h3>
-      {!isCollapsed && <div className="step-content">
-        {stepConfig.showCurrentUrl && step.current_url && (
+      </div>
+      <div className="step-content">
+        {step.current_url && (
           <div className="current-url-container">
-            <div className="current-url-label">
-              <span>🌐</span>Current URL:
-            </div>
+            <p className="current-url-label">Current URL</p>
             <code className="current-url-value">{step.current_url}</code>
           </div>
         )}
-        {stepConfig.renderImage &&
-          step.image_before &&
-          renderImage(step.image_before, "Screenshot before action", `${index}-image_before`)}
-        {step.action_formatted && renderTextData(step.action_formatted, stepConfig)}
-        {step.observation_before && !step.action_formatted && renderTextData(step.observation_before, stepConfig)}
-        {step.data && renderJSONData(step.data, stepConfig)}
-      </div>}
-      {showJsonPopup && (
-        <JsonPopupModal jsonData={parseJsonSafely(step.data || "{}")} onClose={() => setShowJsonPopup(false)} />
-      )}
-      {showJsonPopupPrompts && (
-        <JsonPopupModal
-          jsonData={parseJsonSafely(step.prompts || "{}")}
-          onClose={() => setShowJsonPopupPrompts(false)}
-        />
-      )}
+        {step.image_before && (stepConfig.renderImage ?? true) && renderImage(step.image_before, "Screenshot before action", `${index}-image_before`)}
+        {step.plan && <><h4>Plan</h4>{renderTextData(step.plan)}</>}
+        {step.task_decomposition && <><h4>Task decomposition</h4>{renderTextData(step.task_decomposition)}</>}
+        {(step.action_formatted || step.action_type) && <><h4>Action</h4>{renderTextData(step.action_formatted || step.action_type)}</>}
+        {step.action_args != null && step.action_args !== "" && <><h4>Action arguments</h4>{renderKeyValues(step.action_args, 0, 5, "action-args", "main")}</>}
+        {step.observation_before && (step.action_formatted ?
+          <details className="step-observation"><summary>Observation</summary>{renderTextData(step.observation_before)}</details> :
+          <><h4>Observation</h4>{renderTextData(step.observation_before)}</>)}
+        {data != null && data !== "" && <><h4>Recorded data</h4>
+          {highlights || renderKeyValues(data, 0, 5, "main", "main")}
+        </>}
+        {!step.current_url && !step.image_before && !step.plan && !step.task_decomposition && !step.action_formatted && !step.action_type && !step.action_args && !step.observation_before && (data == null || data === "") &&
+          <p className="text-sm text-muted-foreground">No inputs or observations were recorded for this step.</p>}
+      </div>
     </div>
   );
 }

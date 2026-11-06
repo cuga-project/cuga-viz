@@ -1,20 +1,20 @@
 /* Color theme constants as CSS variables */
-:root {
-  --color-primary: #2563eb;
-  --color-primary-light: #3b82f6;
+.step-container, .step-payload {
+  --color-primary: #344329;
+  --color-primary-light: #4b6036;
   --color-secondary: #64748b;
   --color-accent: #8b5cf6;
   --color-success: #10b981;
   --color-warning: #f59e0b;
   --color-background-black: #22232e;
-  --color-background: #f8fafc;
+  --color-background: #f8f9f5;
   --color-background-dark: #1e293b;
-  --color-border: #e2e8f0;
+  --color-border: #e5e7df;
   --color-text: #334155;
   --color-text-light: #64748b;
   --color-highlight: #fef3c7;
-  --color-interesting-bg: #eff6ff;
-  --color-interesting-border: #bfdbfe;
+  --color-interesting-bg: #f1f5ea;
+  --color-interesting-border: #dde7d3;
 
   /* JSON Viewer specific colors */
   --json-string-color: #047857; /* green-700 */
@@ -25,35 +25,32 @@
   --json-hover-bg: #f0f4f8; /* very light blue-gray */
 }
 
-/* Step Container */
-.step-container {
-  margin-bottom: 24px;
-}
-
+/* Step inspector */
 .step-name {
-  color: rgb(0, 0, 0);
-  font-size: 1.2rem;
-  padding: 16px;
-  margin: 0;
-  border-radius: 12px 12px 0 0;
-  font-weight: 600;
-  display: flex; /* Changed to flex for better alignment of controls */
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  justify-content: space-between; /* Pushes controls to the right */
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 20px;
+  background: #f8f9f4;
+  border-bottom: 1px solid var(--border);
 }
 
-.step-icon {
-  font-size: 18px;
+.step-name h3 {
+  font-size: 1rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
 }
 
-.step-content {
-  padding: 20px;
-  background-color: white;
-  border-radius: 0 0 12px 12px;
-  border: 1px solid var(--color-border);
-  border-top: none;
-}
+.step-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.step-content { padding: 18px 20px 22px; }
+.step-content h4 { margin: 0 0 8px; font-size: .8rem; font-weight: 700; }
+.step-content h4:not(:first-child) { margin-top: 16px; }
+.step-observation { margin-top: 12px; }
+.step-observation summary { cursor: pointer; font-size: .85rem; font-weight: 650; }
+.image-trigger { max-width: 100%; border-radius: 8px; }
 
 /* Current URL */
 .current-url-container {
@@ -66,7 +63,7 @@
 
 .current-url-label {
   font-weight: 600;
-  color: var(--color-warning);
+  color: #795719;
   margin-bottom: 4px;
   font-size: 13px;
   display: flex;
@@ -113,8 +110,22 @@
 
 /* Markdown Content */
 .markdown-content {
-  /* Styles are handled inline via MarkdownPreview */
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  overflow-x: auto;
+  white-space: normal;
+  font: 400 14px/1.55 "Inter Variable", sans-serif;
 }
+
+.markdown-content > * + * { margin-top: .75em; }
+.markdown-content :is(ol, ul) { padding-left: 1.6em; }
+.markdown-content ol { list-style: decimal; }
+.markdown-content ul { list-style: disc; }
+.markdown-content a { color: #456331; text-decoration: underline; }
+.markdown-content blockquote { border-left: 3px solid var(--border); padding-left: .75em; }
+.markdown-content :is(th, td) { padding: .25em .5em; border: 1px solid var(--border); }
 
 /* Interesting Keys */
 .interesting-keys-container {

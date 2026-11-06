@@ -1,585 +1,683 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
-  fetchLoggedExperiments,
-  joinExperiments,
+  Activity,
+  ArrowRight,
+  ArrowUpRight,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
+  Download,
+  FlaskConical,
+  GitCompareArrows,
+  GitMerge,
+  Layers3,
+  MoreHorizontal,
+  RefreshCw,
+  Search,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
+import {
   deleteExperiment,
   downloadExperiment,
-  fetchUncompletedTasks,
   fetchFailedTasks,
+  fetchLoggedExperiments,
+  fetchUncompletedTasks,
+  joinExperiments,
 } from "../services/api";
-import Header from "./Header";
-import "./ExperimentManager.css";
+import { comparisonPath, dashboardPath } from "../utils/routes";
+import { formatPercent, maxComparisonRuns, type Experiment, type ExperimentPage } from "../utils/results";
+import { EmptyState, Metric } from "./Workspace";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Checkbox } from "./ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import { Input } from "./ui/input";
+import { Progress } from "./ui/progress";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
-interface Experiment {
-  name: string;
-  path: string;
-  total_tasks: number;
-  completed_tasks: number;
-  tasks_passed: number;
-  tasks_failed_score_0: string[];
-  errored_tasks: number;
-  uncompleted_task_ids: string[];
-  created_at: number;
-  error?: string;
+const pageSize = 15;
+const dateFormat = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+type TaskList = { name: string; label: string; ids: (string | number)[] };
+
+function getStatus(run: Experiment) {
+  if (run.error) return ["Unavailable", "red"];
+  if (!run.total_tasks) return ["No tasks", "neutral"];
+  if (run.completed_tasks < run.total_tasks) return ["In progress", "amber"];
+  return ["Complete", "green"];
 }
 
-const ExperimentManager: React.FC = () => {
-  const navigate = useNavigate();
-  const [experiments, setExperiments] = useState<Record<string, Experiment>>({});
-  const [selectedExperiments, setSelectedExperiments] = useState<string[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showUncompletedTasks, setShowUncompletedTasks] = useState<string | null>(null);
-  const [showFailedTasks, setShowFailedTasks] = useState<string | null>(null);
-  const [currentModalData, setCurrentModalData] = useState<any[]>([]);
-  const [currentExperimentName, setCurrentExperimentName] = useState<string>("");
-  const [splitCount, setSplitCount] = useState<number>(1);
-  const [loading, setLoading] = useState(false);
-  const [pagination, setPagination] = useState({
-    current_page: 1,
-    total_pages: 1,
-    total_items: 0,
-    per_page: 15,
-  });
-  
-  const [isDemoMode, setIsDemoMode] = useState(true);
+function TraceIllustration() {
+  return (
+    <svg className="hero-art" viewBox="0 0 480 208" fill="none" aria-hidden="true">
+      <defs>
+        <pattern id="trace-dots" width="16" height="16" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="1" fill="#dbe5cf" opacity=".2" />
+        </pattern>
+        <linearGradient id="trace-wash">
+          <stop stopColor="#222a1f" stopOpacity="0" />
+          <stop offset="1" stopColor="#8da16c" stopOpacity=".22" />
+        </linearGradient>
+      </defs>
+      <path d="M0 0h480v208H0z" fill="url(#trace-dots)" />
+      <path d="M0 0h480v208H0z" fill="url(#trace-wash)" />
+      <path
+        d="M36 110h55q10 0 10-10V69q0-10 10-10h94q10 0 10 10v38q0 10 10 10h76q10 0 10-10V79q0-10 10-10h90"
+        stroke="#d7f18a"
+        strokeWidth="2"
+      />
+      <path
+        d="M101 110v30q0 10 10 10h123q10 0 10 10v8q0 10 10 10h115"
+        stroke="#9aa889"
+        strokeDasharray="4 5"
+      />
+      <path d="M311 113v30q0 10 10 10h108" stroke="#9aa889" strokeDasharray="4 5" />
+      <g fill="#283223" stroke="#d7f18a" strokeWidth="2">
+        <circle cx="101" cy="110" r="6" />
+        <circle cx="215" cy="59" r="6" />
+        <circle cx="311" cy="117" r="6" />
+      </g>
+      <circle cx="411" cy="69" r="13" fill="#d7f18a" />
+      <path
+        d="m406 69 3 3 6-6"
+        stroke="#273119"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <g fill="#c5d3b3" fontSize="10" fontFamily="monospace" letterSpacing="1">
+        <text x="112" y="91">
+          PLAN
+        </text>
+        <text x="227" y="55">
+          ACT
+        </text>
+        <text x="330" y="57">
+          OBSERVE
+        </text>
+      </g>
+    </svg>
+  );
+}
 
-  const itemsPerPage = 15;
-
-  // Function to remove timestamp from experiment name
-  const removeTimestamp = (experimentName: string): string => {
-    // Pattern to match timestamp: _DD-MM--HHhMMmSSsSSms
-    const timestampPattern = /_\d{2}-\d{2}--\d{2}h\d{2}m\d{2}s\d{3}ms$/;
-    return experimentName.replace(timestampPattern, "");
-  };
-
-  // Function to split array into chunks
-  const splitArray = (array: any[], numSplits: number): any[][] => {
-    if (numSplits <= 1) return [array];
-
-    const chunkSize = Math.ceil(array.length / numSplits);
-    const chunks: any[][] = [];
-
-    for (let i = 0; i < array.length; i += chunkSize) {
-      chunks.push(array.slice(i, i + chunkSize));
-    }
-
-    return chunks;
-  };
-
-  // Function to generate variable assignment string
-  const generateVariableString = (experimentName: string, tasks: any[], splits: number): string => {
-    const cleanName = removeTimestamp(experimentName);
-
-    if (splits <= 1) {
-      return `${cleanName} = ${JSON.stringify(tasks, null)}`;
-    }
-
-    const splitTasks = splitArray(tasks, splits);
-    const suffixes = "abcdefghijklmnopqrstuvwxyz";
-
-    return splitTasks
-      .map((chunk, index) => {
-        const suffix = index < suffixes.length ? suffixes[index] : index.toString();
-        return `${cleanName}_${suffix} = ${JSON.stringify(chunk, null)}`;
-      })
-      .join("\n\n");
-  };
-
-  const loadLoggedExperiments = async (page = 1, query = "") => {
-    setLoading(true);
-    try {
-      const data = await fetchLoggedExperiments(page, itemsPerPage, query);
-      setExperiments(data.experiments || {});
-      if (data.pagination) {
-        setPagination(data.pagination);
-      }
-    } catch (error) {
-      console.error("Error loading experiments:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  
-
-  
-
-  useEffect(() => {
-    loadLoggedExperiments(currentPage, searchQuery);
-
-    const interval = setInterval(() => {
-      loadLoggedExperiments(currentPage, searchQuery);
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [currentPage, searchQuery]);
-
-  const handleJoinExperiments = async () => {
-    if (selectedExperiments.length < 2) return;
-    const newName = prompt("Enter name for the joined experiment:");
-    if (!newName) return;
-
-    try {
-      setLoading(true);
-      await joinExperiments(selectedExperiments, newName);
-      setSelectedExperiments([]);
-      await loadLoggedExperiments(1, ""); // Refresh to first page
-    } catch (error) {
-      console.error("Error joining experiments:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteExperiments = async () => {
-    if (selectedExperiments.length === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedExperiments.length} experiment(s)?`)) return;
-
-    try {
-      setLoading(true);
-      await deleteExperiment(selectedExperiments);
-      setSelectedExperiments([]);
-      await loadLoggedExperiments(currentPage, searchQuery);
-    } catch (error) {
-      console.error("Error deleting experiments:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDownloadExperiment = async (experimentName: string) => {
-    try {
-      const blob = await downloadExperiment(experimentName);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${experimentName}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
-    } catch (error) {
-      console.error("Error downloading experiment:", error);
-    }
-  };
-
-  const showUncompletedTasksDialog = async (experimentName: string) => {
-    try {
-      const data = await fetchUncompletedTasks(experimentName);
-      setCurrentModalData(data.uncompleted_tasks || []);
-      setCurrentExperimentName(experimentName);
-      setShowUncompletedTasks(experimentName);
-      setSplitCount(1);
-    } catch (error) {
-      console.error("Error loading uncompleted tasks:", error);
-    }
-  };
-
-  const showFailedTasksDialog = async (experimentName: string) => {
-    try {
-      const data = await fetchFailedTasks(experimentName);
-      setCurrentModalData(data.failed_tasks || []);
-      setCurrentExperimentName(experimentName);
-      setShowFailedTasks(experimentName);
-      setSplitCount(1);
-    } catch (error) {
-      console.error("Error loading failed tasks:", error);
-    }
-  };
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-    setCurrentPage(1); // Reset to first page on new search
-  };
-
-  const formatDate = (timestamp: number) => new Date(timestamp * 1000).toLocaleString();
-
-  const handlePreviousPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
-
-  const handleNextPage = () => {
-    if (currentPage < pagination.total_pages) {
-      setCurrentPage(currentPage + 1);
-    }
-  };
-
-  const handleCopyToClipboard = () => {
-    const content = generateVariableString(currentExperimentName, currentModalData, splitCount);
-    navigator.clipboard.writeText(content);
-  };
-
-  const closeModal = () => {
-    setShowUncompletedTasks(null);
-    setShowFailedTasks(null);
-    setCurrentModalData([]);
-    setCurrentExperimentName("");
-    setSplitCount(1);
-  };
-
-  const Progress = ({ completed, total }: { completed: number; total: number }) => {
-    const percentage = total > 0 ? (completed / total) * 100 : 0;
-    return (
-      <div className="progress-bar-container">
-        <div className="progress-bar">
-          <div className="progress-bar-inner" style={{ width: `${percentage}%` }} />
-        </div>
-      </div>
-    );
-  };
-
-  const memoizedExperiments = useMemo(() => Object.entries(experiments), [experiments]);
+function TaskExport({ list, close }: { list: TaskList; close: () => void }) {
+  const [parts, setParts] = useState(1);
+  const [copyState, setCopyState] = useState("");
+  const chunkSize = Math.max(1, Math.ceil(list.ids.length / parts));
+  const cleanName = list.name.replace(/_\d{2}-\d{2}--\d{2}h\d{2}m\d{2}s\d{3}ms$/, "");
+  const chunks =
+    parts === 1 || !list.ids.length
+      ? [list.ids]
+      : Array.from({ length: Math.ceil(list.ids.length / chunkSize) }, (_, index) =>
+          list.ids.slice(index * chunkSize, (index + 1) * chunkSize),
+        );
+  const code = chunks
+    .map(
+      (ids, index) =>
+        `${cleanName}${parts > 1 ? `_${String.fromCharCode(97 + index)}` : ""} = ${JSON.stringify(ids)}`,
+    )
+    .join("\n\n");
 
   return (
-    <div className="App">
-      <div style={{ minHeight: "100vh", padding: "24px", backgroundColor: "#f9fafb" }}>
-        <Header currentView="Home" />
-        
-        <div
-          style={{
-            margin: "12px 0 20px 0",
-            padding: "16px 20px",
-            backgroundColor: "#ffffff",
-            border: "1px solid #e5e7eb",
-            borderRadius: "10px",
-            boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.1)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div
-              style={{
-                width: "48px",
-                height: "48px",
-                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                borderRadius: "10px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{list.label}</DialogTitle>
+          <DialogDescription>
+            {list.name} · {list.ids.length} task IDs
+          </DialogDescription>
+        </DialogHeader>
+        <label className="flex items-center gap-3 text-sm">
+          Split into
+          <Input
+            className="w-20"
+            type="number"
+            min={1}
+            max={26}
+            value={parts}
+            onChange={(event) => {
+              setParts(Math.min(26, Math.max(1, Number.parseInt(event.target.value) || 1)));
+              setCopyState("");
+            }}
+          />
+          parts
+        </label>
+        <pre className="max-h-72 overflow-auto">{code}</pre>
+        <DialogFooter>
+          <span role="status" className="self-center text-sm text-muted-foreground">
+            {copyState}
+          </span>
+          <Button
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(code);
+                setCopyState("Copied");
+              } catch {
+                setCopyState("Copy failed. Select and copy the text above.");
+              }
+            }}
+          >
+            Copy task IDs
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export default function ExperimentManager({
+  selected,
+  setSelected,
+}: {
+  selected: string[];
+  setSelected: Dispatch<SetStateAction<string[]>>;
+}) {
+  const [params, setParams] = useSearchParams();
+  const experimentsPath = params.size ? `/?${params}` : "/";
+  const search = params.get("q") ?? "";
+  const page = Math.max(1, Number.parseInt(params.get("page") ?? "", 10) || 1);
+  const [data, setData] = useState<ExperimentPage>();
+  const [version, setVersion] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [action, setAction] = useState<"join" | "delete">();
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [taskList, setTaskList] = useState<TaskList>();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const refresh = async (showLoading: boolean) => {
+      if (showLoading) setLoading(true);
+      try {
+        const result = await fetchLoggedExperiments(page, pageSize, search, controller.signal);
+        if (controller.signal.aborted) return;
+        setData(result);
+        setError("");
+        if (page > result.pagination.total_pages) {
+          setParams(
+            (current) => {
+              const next = new URLSearchParams(current);
+              next.delete("page");
+              return next;
+            },
+            { replace: true },
+          );
+        }
+      } catch {
+        if (!controller.signal.aborted)
+          setError("Could not load experiments. Check the local CugaViz server and try again.");
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+    let timer: number;
+    const poll = async (showLoading: boolean) => {
+      await refresh(showLoading);
+      if (!controller.signal.aborted) timer = window.setTimeout(() => void poll(false), 30_000);
+    };
+    void poll(true);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [page, search, version, setParams]);
+
+  function updateList(nextSearch: string, nextPage: number, replace = false) {
+    const next = new URLSearchParams();
+    if (nextSearch) next.set("q", nextSearch);
+    if (nextPage > 1) next.set("page", String(nextPage));
+    setParams(next, { replace });
+  }
+
+  async function manageRuns() {
+    setBusy(true);
+    setActionError("");
+    try {
+      if (action === "join") await joinExperiments(selected, name.trim());
+      if (action === "delete") {
+        const result = await deleteExperiment(selected);
+        if (result.failed_deletions?.length) setActionError(result.message);
+      }
+      setSelected([]);
+      setAction(undefined);
+      if (action === "join") updateList("", 1);
+      setVersion((value) => value + 1);
+    } catch {
+      setActionError(
+        action === "join"
+          ? "Could not join the selected experiments."
+          : "Could not delete the selected experiments.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadTaskList(run: string, failed: boolean) {
+    setActionError("");
+    try {
+      const result = failed ? await fetchFailedTasks(run) : await fetchUncompletedTasks(run);
+      setTaskList({
+        name: run,
+        label: failed ? "Failed tasks" : "Uncompleted tasks",
+        ids: (failed ? result.failed_tasks : result.uncompleted_tasks) ?? [],
+      });
+    } catch {
+      setActionError(`Could not load the task IDs for ${run}.`);
+    }
+  }
+
+  async function download(run: string) {
+    setActionError("");
+    try {
+      const blob = await downloadExperiment(run);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${run}.zip`;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setActionError(`Could not download ${run}.`);
+    }
+  }
+
+  const runs = Object.entries(data?.experiments ?? {});
+  const visibleNames = runs.map(([runName]) => runName);
+  const visibleSelection = visibleNames.filter((runName) => selected.includes(runName)).length;
+  const canCompare = selected.length <= maxComparisonRuns;
+  const valid = runs.map(([, run]) => run).filter((run) => !run.error);
+  const total = valid.reduce((sum, run) => sum + run.total_tasks, 0);
+  const passed = valid.reduce((sum, run) => sum + run.tasks_passed, 0);
+  const errors = valid.reduce((sum, run) => sum + run.errored_tasks, 0);
+
+  return (
+    <>
+      <div className="workspace-hero">
+        <div className="hero-copy">
+          <p className="eyebrow">
+            <Activity size={14} /> AGENT WORKSPACE
+          </p>
+          <h1>Experiments</h1>
+          <p>Inspect agent runs, compare outcomes, and follow every step.</p>
+        </div>
+        <TraceIllustration />
+      </div>
+
+      <div className="metric-grid">
+        <Metric
+          icon={FlaskConical}
+          tone="amber"
+          label="Experiments"
+          value={data?.pagination.total_items ?? "—"}
+          detail={search ? "Matching your search" : "Recorded in this workspace"}
+        />
+        <Metric
+          icon={Layers3}
+          tone="neutral"
+          label="Tasks"
+          value={data && valid.length ? total.toLocaleString() : "—"}
+          detail="Planned across visible runs"
+        />
+        <Metric
+          icon={CheckCircle2}
+          tone="green"
+          label="Pass rate"
+          value={formatPercent(passed, total)}
+          detail="Passed / planned in visible runs"
+        />
+        <Metric
+          icon={TriangleAlert}
+          tone="red"
+          label="Exceptions"
+          value={data && valid.length ? errors.toLocaleString() : "—"}
+          detail="Reported in visible runs"
+        />
+      </div>
+
+      <Card className="run-library">
+        <div className="library-heading">
+          <div>
+            <h2>Run library</h2>
+            <p>Open a run to inspect its tasks, or select up to {maxComparisonRuns} to compare.</p>
+          </div>
+          {canCompare ? (
+            <Button asChild className="compare-cta">
+              <Link to={comparisonPath(selected)}>
+                <GitCompareArrows /> Compare runs {selected.length > 0 && <span>{selected.length}</span>}
+              </Link>
+            </Button>
+          ) : (
+            <Button disabled>
+              <GitCompareArrows /> Compare up to {maxComparisonRuns} runs
+            </Button>
+          )}
+        </div>
+        <div className="library-tools">
+          <div className="search-field">
+            <Search size={16} aria-hidden="true" />
+            <Input
+              aria-label="Search experiments"
+              placeholder="Search experiments…"
+              value={search}
+              onChange={(event) => updateList(event.target.value, 1, true)}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {selected.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
+                <X /> Clear {selected.length}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loading}
+              onClick={() => setVersion((value) => value + 1)}
+            >
+              <RefreshCw /> Refresh
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="Run management">
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={selected.length < 2}
+                  onSelect={() => {
+                    setActionError("");
+                    setName("");
+                    setAction("join");
+                  }}
+                >
+                  <GitMerge /> Join selected
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={!selected.length}
+                  onSelect={() => {
+                    setActionError("");
+                    setAction("delete");
+                  }}
+                >
+                  <Trash2 /> Delete selected
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {!action && actionError && (
+          <p role="alert" className="inline-error">
+            {actionError}
+          </p>
+        )}
+        {error ? (
+          <EmptyState icon={CircleAlert} title="Experiments unavailable">
+            <p>{error}</p>
+          </EmptyState>
+        ) : loading && !data ? (
+          <p role="status" className="loading-state">
+            Loading experiments…
+          </p>
+        ) : runs.length ? (
+          <Table className="runs-table" aria-label="Experiments" aria-busy={loading}>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  <Checkbox
+                    aria-label="Select all visible experiments"
+                    checked={
+                      visibleSelection === runs.length ? true : visibleSelection > 0 ? "indeterminate" : false
+                    }
+                    onCheckedChange={(on) =>
+                      setSelected((current) =>
+                        on
+                          ? [...new Set([...current, ...visibleNames])]
+                          : current.filter((value) => !visibleNames.includes(value)),
+                      )
+                    }
+                  />
+                </TableHead>
+                <TableHead>Experiment</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Completed</TableHead>
+                <TableHead>Pass rate</TableHead>
+                <TableHead>Exceptions</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {runs.map(([runName, run]) => {
+                const [status, tone] = getStatus(run);
+                const checked = selected.includes(runName);
+                const complete = run.total_tasks
+                  ? Math.min(100, (run.completed_tasks / run.total_tasks) * 100)
+                  : 0;
+                return (
+                  <TableRow key={runName} data-state={checked ? "selected" : undefined}>
+                    <TableCell>
+                      <Checkbox
+                        aria-label={`Select ${runName}`}
+                        checked={checked}
+                        onCheckedChange={(on) =>
+                          setSelected((current) =>
+                            on ? [...current, runName] : current.filter((value) => value !== runName),
+                          )
+                        }
+                      />
+                    </TableCell>
+                    <TableCell className="run-name">
+                      <Link to={dashboardPath(runName)} state={{ experimentsPath }}>
+                        {runName}
+                        <ArrowUpRight size={13} />
+                      </Link>
+                      {run.error && <small className="block text-destructive">{run.error}</small>}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={`status-pill ${tone}`}>
+                        <i />
+                        {status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="completion-cell">
+                      {run.error ? (
+                        "—"
+                      ) : (
+                        <div>
+                          <span>
+                            {run.completed_tasks}{" "}
+                            <span className="text-muted-foreground">/ {run.total_tasks}</span>
+                          </span>
+                          <Progress aria-label="Task completion" value={complete} className="h-1.5 w-19" />
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-semibold">
+                      {run.error ? "—" : formatPercent(run.tasks_passed, run.total_tasks)}
+                    </TableCell>
+                    <TableCell>{run.error ? "—" : run.errored_tasks}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {run.created_at ? dateFormat.format(run.created_at * 1000) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button asChild variant="ghost" size="icon-sm">
+                          <Link
+                            to={dashboardPath(runName)}
+                            state={{ experimentsPath }}
+                            aria-label={`Open ${runName}`}
+                          >
+                            <ArrowRight />
+                          </Link>
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${runName}`}>
+                              <MoreHorizontal />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => void download(runName)}>
+                              <Download /> Download ZIP
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onSelect={() => void loadTaskList(runName, true)}>
+                              Failed tasks {!run.error && `(${run.tasks_failed_score_0.length})`}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => void loadTaskList(runName, false)}>
+                              Uncompleted tasks
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        ) : loading ? (
+          <p role="status" className="loading-state">
+            Loading experiments…
+          </p>
+        ) : (
+          <EmptyState
+            icon={FlaskConical}
+            title={search ? "No matching experiments" : "No experiments recorded"}
+          >
+            {search ? (
+              <Button variant="outline" onClick={() => updateList("", 1)}>
+                Clear search
+              </Button>
+            ) : (
+              <p>
+                Point <code>cuga-viz run</code> at a directory of recorded experiments.
+              </p>
+            )}
+          </EmptyState>
+        )}
+        {data && !error && runs.length > 0 && (
+          <div className="library-footer">
+            <span>
+              {(page - 1) * pageSize + 1}–{(page - 1) * pageSize + runs.length} of{" "}
+              {data.pagination.total_items} experiments
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label="Previous page"
+                disabled={page <= 1 || loading}
+                onClick={() => updateList(search, page - 1)}
+              >
+                <ChevronLeft />
+              </Button>
+              <span>
+                Page {page} of {data.pagination.total_pages}
+              </span>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label="Next page"
+                disabled={page >= data.pagination.total_pages || loading}
+                onClick={() => updateList(search, page + 1)}
+              >
+                <ChevronRight />
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {taskList && <TaskExport list={taskList} close={() => setTaskList(undefined)} />}
+      <Dialog
+        open={Boolean(action)}
+        onOpenChange={(open) => {
+          if (!open && !busy) {
+            setAction(undefined);
+            setActionError("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{action === "join" ? "Join experiments" : "Delete experiments"}</DialogTitle>
+            <DialogDescription>
+              {action === "join"
+                ? "Combine the selected runs into a new experiment."
+                : "The selected experiment logs will be permanently removed."}
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-32 list-disc overflow-auto pl-5 text-sm">
+            {selected.map((run) => (
+              <li key={run}>{run}</li>
+            ))}
+          </ul>
+          {action === "join" && (
+            <Input
+              aria-label="New experiment name"
+              placeholder="New experiment name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          )}
+          {actionError && (
+            <p role="alert" className="text-sm text-destructive">
+              {actionError}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setAction(undefined);
+                setActionError("");
               }}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-            </div>
-            <div>
-              <div style={{ fontSize: "0.75rem", fontWeight: "600", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                Cuga Visualizer
-              </div>
-              <div style={{ fontSize: "1.25rem", fontWeight: "600", color: "#111827", marginTop: "2px" }}>
-                Experiment Management
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="experiment-manager">
-          <div className="header">
-            <h1>Experiments</h1>
-            <div className="controls">
-          <button onClick={() => setIsDemoMode(!isDemoMode)} className={isDemoMode ? "active" : ""}>
-            {isDemoMode ? "Card View" : "Table View"}
-          </button>
-          <button onClick={() => loadLoggedExperiments(currentPage, searchQuery)} disabled={loading}>
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
-          <button onClick={handleJoinExperiments} disabled={selectedExperiments.length < 2 || loading}>
-            Join ({selectedExperiments.length})
-          </button>
-          <button
-            onClick={handleDeleteExperiments}
-            disabled={selectedExperiments.length === 0 || loading}
-            className="danger"
-          >
-            Delete ({selectedExperiments.length})
-          </button>
-        </div>
-      </div>
-
-      <div className="search-pagination">
-        <input
-          type="text"
-          placeholder="Search experiments by name..."
-          value={searchQuery}
-          onChange={handleSearchChange}
-          className="search-input"
-        />
-        <div className="pagination">
-          <button onClick={handlePreviousPage} disabled={currentPage === 1 || loading}>
-            Previous
-          </button>
-          <span>
-            Page {pagination.current_page} of {pagination.total_pages}
-          </span>
-          <button onClick={handleNextPage} disabled={currentPage === pagination.total_pages || loading}>
-            Next
-          </button>
-        </div>
-      </div>
-
-      {isDemoMode ? (
-        <div className="experiments-table-container">
-          <table className="experiments-table">
-            <thead>
-              <tr>
-                <th className="checkbox-column">
-                  <input
-                    type="checkbox"
-                    checked={
-                      memoizedExperiments.length > 0 &&
-                      selectedExperiments.length === memoizedExperiments.length
-                    }
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedExperiments(memoizedExperiments.map(([name]) => name));
-                      } else {
-                        setSelectedExperiments([]);
-                      }
-                    }}
-                  />
-                </th>
-                <th>Name</th>
-                <th>Progress</th>
-                <th>Total</th>
-                <th>Completed</th>
-                <th>Passed</th>
-                <th>Failed</th>
-                <th>Errors</th>
-                <th>Created</th>
-                <th>Dashboard</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {memoizedExperiments.map(([name, experiment]) => (
-                <tr key={name} className={experiment.error ? "error-row" : ""}>
-                  <td className="checkbox-column">
-                    <input
-                      type="checkbox"
-                      checked={selectedExperiments.includes(name)}
-                      onChange={(e) => {
-                        const newSelected = e.target.checked
-                          ? [...selectedExperiments, name]
-                          : selectedExperiments.filter((n) => n !== name);
-                        setSelectedExperiments(newSelected);
-                      }}
-                    />
-                  </td>
-                  <td className="name-column">{name}</td>
-                  <td className="progress-column">
-                    {!experiment.error && (
-                      <div className="table-progress-bar">
-                        <div
-                          className="table-progress-fill"
-                          style={{
-                            width: `${experiment.total_tasks > 0 ? (experiment.completed_tasks / experiment.total_tasks) * 100 : 0}%`,
-                          }}
-                        />
-                      </div>
-                    )}
-                  </td>
-                  <td>{!experiment.error ? experiment.total_tasks : "-"}</td>
-                  <td>{!experiment.error ? experiment.completed_tasks : "-"}</td>
-                  <td className="success-text">{!experiment.error ? experiment.tasks_passed : "-"}</td>
-                  <td className="danger-text">
-                    {!experiment.error ? experiment.tasks_failed_score_0.length : "-"}
-                  </td>
-                  <td className="warning-text">{!experiment.error ? experiment.errored_tasks : "-"}</td>
-                  <td className="date-column">{formatDate(experiment.created_at)}</td>
-                  <td className="dashboard-column">
-                    <button
-                      className="dashboard-control-btn start"
-                      onClick={() => navigate(`/dashboard?experiment=${encodeURIComponent(name)}`)}
-                      disabled={loading}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polygon points="5,3 19,12 5,21" />
-                      </svg>
-                      Open
-                    </button>
-                  </td>
-                  <td className="actions-column">
-                    <div className="table-actions">
-                      <button
-                        className="table-action-btn"
-                        onClick={() => handleDownloadExperiment(name)}
-                        title="Download"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="7,10 12,15 17,10" />
-                          <line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                      </button>
-                      <button
-                        className="table-action-btn"
-                        onClick={() => showUncompletedTasksDialog(name)}
-                        title="Uncompleted"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="12" y1="8" x2="12" y2="12" />
-                          <line x1="12" y1="16" x2="12.01" y2="16" />
-                        </svg>
-                      </button>
-                      <button
-                        className="table-action-btn"
-                        onClick={() => showFailedTasksDialog(name)}
-                        title="Failed"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="15" y1="9" x2="9" y2="15" />
-                          <line x1="9" y1="9" x2="15" y2="15" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="experiments-list">
-          {memoizedExperiments.map(([name, experiment]) => (
-            <div key={name} className={`experiment-card ${experiment.error ? "error" : ""}`}>
-              <div className="experiment-header">
-                <div className="experiment-header-left">
-                  <label className="custom-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedExperiments.includes(name)}
-                      onChange={(e) => {
-                        const newSelected = e.target.checked
-                          ? [...selectedExperiments, name]
-                          : selectedExperiments.filter((n) => n !== name);
-                        setSelectedExperiments(newSelected);
-                      }}
-                    />
-                    <span className="checkmark"></span>
-                  </label>
-                  <h3 className="experiment-title">{name}</h3>
-                </div>
-
-                <div className="experiment-actions">
-                  <button className="action-btn download-btn" onClick={() => handleDownloadExperiment(name)}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7,10 12,15 17,10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    Download
-                  </button>
-                  <button className="action-btn uncompleted-btn" onClick={() => showUncompletedTasksDialog(name)}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    Uncompleted
-                  </button>
-                  <button className="action-btn failed-btn" onClick={() => showFailedTasksDialog(name)}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="15" y1="9" x2="9" y2="15" />
-                      <line x1="9" y1="9" x2="15" y2="15" />
-                    </svg>
-                    Failed
-                  </button>
-                  <button
-                    className="action-btn dashboard-btn"
-                    onClick={() => navigate(`/dashboard?experiment=${encodeURIComponent(name)}`)}
-                    disabled={loading}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <line x1="9" y1="9" x2="9" y2="15" />
-                      <line x1="15" y1="9" x2="15" y2="15" />
-                    </svg>
-                    Open Dashboard
-                  </button>
-                </div>
-              </div>
-              {!experiment.error ? (
-                <>
-                  <Progress completed={experiment.completed_tasks} total={experiment.total_tasks} />
-                  <div className="experiment-stats">
-                    <div className="stat">
-                      <span className="label">Total Tasks</span>
-                      <span className="value">{experiment.total_tasks}</span>
-                    </div>
-                    <div className="stat">
-                      <span className="label">Completed</span>
-                      <span className="value">{experiment.completed_tasks}</span>
-                    </div>
-                    <div className="stat">
-                      <span className="label">Passed</span>
-                      <span className="value green">{experiment.tasks_passed}</span>
-                    </div>
-                    <div className="stat">
-                      <span className="label">Failed</span>
-                      <span className="value red">{experiment.tasks_failed_score_0.length}</span>
-                    </div>
-                    <div className="stat">
-                      <span className="label">Errors</span>
-                      <span className="value orange">{experiment.errored_tasks}</span>
-                    </div>
-                    <div className="stat">
-                      <span className="label">Created On</span>
-                      <span className="value">{formatDate(experiment.created_at)}</span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="error-message">
-                  <strong>Error:</strong> {experiment.error}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {(showUncompletedTasks || showFailedTasks) && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>
-                {showUncompletedTasks ? "Uncompleted Tasks" : "Failed Tasks"}
-                <span className="task-count"> ({currentModalData.length} tasks)</span>
-              </h3>
-              <button onClick={closeModal}>×</button>
-            </div>
-            <div className="modal-controls">
-              <label>
-                Split into:
-                <input
-                  type="number"
-                  min="1"
-                  max="26"
-                  value={splitCount}
-                  onChange={(e) => setSplitCount(Math.max(1, parseInt(e.target.value) || 1))}
-                  style={{ marginLeft: "8px", width: "60px" }}
-                />
-                parts
-              </label>
-            </div>
-            <div className="modal-body">
-              <pre>{generateVariableString(currentExperimentName, currentModalData, splitCount)}</pre>
-              <button onClick={handleCopyToClipboard}>Copy to Clipboard</button>
-            </div>
-          </div>
-        </div>
-      )}
-        </div>
-      </div>
-    </div>
+              Cancel
+            </Button>
+            <Button
+              variant={action === "delete" ? "destructive" : "default"}
+              disabled={busy || (action === "join" && !name.trim())}
+              onClick={() => void manageRuns()}
+            >
+              {busy ? "Working…" : action === "join" ? "Join experiments" : "Delete experiments"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
-};
-
-export default ExperimentManager;
+}

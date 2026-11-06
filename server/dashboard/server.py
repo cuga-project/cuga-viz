@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 import json
@@ -35,8 +35,6 @@ args = parser.parse_args()
 
 app = FastAPI()
 
-# Initialize ActivityTracker
-
 # Directory containing the React build
 BUILD_DIR = args.data_dir
 EXPERIMENTS_DIR = args.experiments_dir
@@ -51,27 +49,33 @@ LOGGING_DIR = (
 # If only experiments_dir is provided, use it as BUILD_DIR for serving static files
 if EXPERIMENTS_DIR and not args.data_dir != "./data":  # data_dir is default
     BUILD_DIR = EXPERIMENTS_DIR
-    tracker = ActivityTracker()
-    tracker.set_base_dir(EXPERIMENTS_DIR)
+
+tracker = ActivityTracker()
+tracker.set_base_dir(LOGGING_DIR)
 
 
 # Use absolute paths based on the package's location
-package_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+package_dir = str(Path(__file__).resolve().parents[1])
 base_dir = os.path.dirname(package_dir)
 
 # Define static directories with absolute paths
-static_dirs = [os.path.join(package_dir, "static"), os.path.join(base_dir, "static")]
-STATIC_DIR_HTML = next(
-    (d for d in static_dirs if os.path.exists(d)),
-    os.environ.get("STATIC_DIR_HTML", os.path.join(base_dir, "static")),
-)
+static_dirs = [
+    os.environ.get("STATIC_DIR_HTML"),
+    os.path.join(base_dir, "dist"),
+    os.path.join(os.path.dirname(__file__), "static"),
+    os.path.join(package_dir, "static"),
+    os.path.join(base_dir, "static"),
+]
+STATIC_DIR_HTML = next((os.path.realpath(d) for d in static_dirs if d and os.path.isdir(d)), static_dirs[-1])
 logger.info(f"Using static directory: {STATIC_DIR_HTML}")
 
-asset_dirs = [os.path.join(package_dir, "assets"), os.path.join(base_dir, "assets")]
-assets_dir = next(
-    (d for d in asset_dirs if os.path.exists(d)),
-    os.environ.get("ASSETS_DIR", os.path.join(base_dir, "assets")),
-)
+asset_dirs = [
+    os.environ.get("ASSETS_DIR"),
+    os.path.join(STATIC_DIR_HTML, "assets"),
+    os.path.join(package_dir, "assets"),
+    os.path.join(base_dir, "assets"),
+]
+assets_dir = next((d for d in asset_dirs if d and os.path.isdir(d)), asset_dirs[-1])
 logger.info(f"Using assets directory: {assets_dir}")
 
 # Directory containing static files
@@ -107,8 +111,7 @@ class SecureStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         try:
             requested_path = (self.directory_path / path).resolve()
-            print(requested_path)
-            if not str(requested_path).startswith(str(self.directory)):
+            if not requested_path.is_relative_to(self.directory_path):
                 raise HTTPException(status_code=404, detail="File not found")
         except (OSError, ValueError):
             raise HTTPException(status_code=404, detail="File not found")
@@ -156,7 +159,7 @@ def get_last_completed_id(experiment_name):
         return lines[-1] if lines else None
 
 
-def load_logged_experiments():
+def load_logged_experiments(names: Optional[set[str]] = None):
     """
     Scans the logging directory, reads results.json and aggregates stats based on score.
     This matches the eval_gui.py load_logged_experiments method exactly.
@@ -166,6 +169,8 @@ def load_logged_experiments():
         return logged_experiments
 
     for exp_folder in os.listdir(LOGGING_DIR):
+        if names is not None and exp_folder not in names:
+            continue
         exp_path = os.path.join(LOGGING_DIR, exp_folder)
         results_file = os.path.join(exp_path, "results.json")
 
@@ -343,10 +348,12 @@ async def get_experiment_config():
 
 
 @app.get("/api/experiments/logged")
-async def get_logged_experiments(page: int = 1, per_page: int = 15, search: str = ""):
+async def get_logged_experiments(
+    page: int = 1, per_page: int = 15, search: str = "", name: Optional[List[str]] = Query(None)
+):
     """Get list of logged experiments with pagination and search"""
     try:
-        experiments = load_logged_experiments()
+        experiments = load_logged_experiments(set(name) if name else None)
 
         # Apply search filter
         if search:
@@ -880,21 +887,31 @@ async def get_csv_as_json(experiment_name: Optional[str] = None) -> JSONResponse
     try:
         # Construct the full path to the CSV file
         if experiment_name:
-            full_path = Path(LOGGING_DIR) / experiment_name / "results.csv"
+            logging_root = Path(LOGGING_DIR).resolve()
+            full_path = (logging_root / experiment_name / "results.csv").resolve()
+            if not full_path.is_relative_to(logging_root):
+                raise HTTPException(status_code=404, detail="Experiment not found")
         else:
             full_path = Path(BUILD_DIR) / "results.csv"
         if not full_path.exists():
             raise HTTPException(status_code=404, detail=f"CSV file not found: {full_path}")
 
         # Read the CSV file and convert to JSON
-        df = pd.read_csv(full_path)
+        # Prefix IDs during parsing so pandas preserves literal IDs such as "001" and "NA".
+        df = pd.read_csv(full_path, converters={"task_id": lambda value: f"_{value}"})
+        if "task_id" in df.columns:
+            df["task_id"] = df["task_id"].str[1:].replace("", pd.NA)
         processed_records = []
         for index, row in df.iterrows():
             # Create a new dictionary for each row, filtering out None values
             filtered_row_dict = {key: value for key, value in row.items() if not pd.isna(value)}
             processed_records.append(filtered_row_dict)
 
-        response_content = {"data": processed_records, "columnConfig": col_config}
+        response_content = {
+            "data": processed_records,
+            "columns": df.columns.tolist(),
+            "columnConfig": col_config,
+        }
         return JSONResponse(
             content=response_content,
             headers={
@@ -903,6 +920,8 @@ async def get_csv_as_json(experiment_name: Optional[str] = None) -> JSONResponse
                 "Expires": "0",
             },
         )
+    except HTTPException:
+        raise
     except csv.Error:
         raise HTTPException(status_code=500, detail=f"Invalid CSV format in file: {full_path}")
     except Exception as e:
@@ -1151,8 +1170,7 @@ async def serve_react(full_path: str, request: Request):
     # Try to serve the requested file
     file_path = Path(os.path.join(STATIC_DIR_HTML, full_path))
     requested_path = file_path.resolve()
-    print(requested_path)
-    if not str(requested_path).startswith(str(STATIC_DIR_HTML)):
+    if not requested_path.is_relative_to(STATIC_DIR_HTML):
         raise HTTPException(status_code=404, detail="File not found")
     if file_path.exists() and file_path.is_file():
         return FileResponse(file_path)

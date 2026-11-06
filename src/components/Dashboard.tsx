@@ -1,222 +1,311 @@
-// @ts-nocheck
-import React, { useState, useEffect } from "react";
-import { fetchDataTable, fetchStatsTables } from "../services/api";
-import { AccuracyChart, StatsSection, ResultsTable } from "./dashboard/index";
-import Header from "./Header";
-import WebArenaStatistics from "./dashboard/WebArena";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import {
+  Activity,
+  ArrowRight,
+  CheckCircle2,
+  CircleAlert,
+  GitCompareArrows,
+  Layers3,
+  ListFilter,
+  Search,
+  TriangleAlert,
+} from "lucide-react";
+import { fetchDataTable } from "../services/api";
+import { average, numberValue, outcome, outcomeTone, type Outcome } from "../utils/results";
+import { comparisonPath, tracePath } from "../utils/routes";
+import { BackLink, EmptyState, Metric, PageHeading } from "./Workspace";
+import ResultsTable from "./dashboard/ResultsTable";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Input } from "./ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
-// Enhanced Accuracy Chart that conditionally renders based on URL parameter
-const MyChart = ({ data, isLoading }) => {
-  const [showWebArena, setShowWebArena] = useState(false);
+const outcomes: Outcome[] = ["Passed", "Failed", "Error", "Scored", "Unscored"];
+const pageSize = 30;
+
+function RunResults({ experiment }: { experiment?: string }) {
+  const [response, setResponse] = useState<Awaited<ReturnType<typeof fetchDataTable>>>();
+  const [error, setError] = useState(false);
+  const [version, setVersion] = useState(0);
+  const [params, setParams] = useSearchParams();
+  const { state } = useLocation();
+  const back = state?.comparisonPath
+    ? { to: state.comparisonPath, label: "Back to comparison" }
+    : { to: state?.experimentsPath ?? "/", label: "Experiments" };
+  const search = params.get("q") ?? "";
+  const filter = params.get("outcome") ?? "";
+  const page = Math.max(1, Number.parseInt(params.get("page") ?? "", 10) || 1);
+  const resultsPath = `/dashboard${params.size ? `?${params}` : ""}`;
+  const view = params.get("view") === "fields" ? "fields" : "tasks";
 
   useEffect(() => {
-    // Check URL query parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const benchmark = urlParams.get("benchmark");
-    setShowWebArena(benchmark === "webarena");
-  }, []);
+    const controller = new AbortController();
+    setResponse(undefined);
+    setError(false);
+    fetchDataTable(experiment, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setResponse(data);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setError(true);
+      });
+    return () => controller.abort();
+  }, [experiment, version]);
 
-  // If benchmark=webarena is in URL, show WebArena statistics
-  if (showWebArena) {
-    return <WebArenaStatistics />;
+  function update(changes: Record<string, string>, replace = false) {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    setParams(next, { replace, state });
   }
 
-  // Otherwise, show the original accuracy chart
-  return <AccuracyChart data={data} isLoading={isLoading} />;
-};
-
-/**
- * Main dashboard component that orchestrates the different sections
- */
-const ResultsDashboard = () => {
-  const navigate = useNavigate();
-  // Primary state
-  const [historyData, setHistoryData] = useState([]);
-  const [resultsData, setResultsData] = useState([]);
-  const [columns, setColumns] = useState([]);
-  const [statsTables, setStatsTables] = useState([]);
-  const [columnConfig, setColumnConfig] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Load initial data
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-
-        // Generate dummy history data for the chart
-        const startDate = new Date("2023-09-01");
-        const dummyHistoryData = generateHistoryData(startDate);
-        setHistoryData(dummyHistoryData);
-
-        const params = new URLSearchParams(window.location.search);
-        const experimentName = params.get("experiment") || undefined;
-
-        // Fetch actual data from API
-        const response = await fetchDataTable(experimentName);
-
-        // Assume the API response includes both data and column configuration
-        const { data, columnConfig, columns: apiColumns } = response;
-
-        setResultsData(data);
-        setColumnConfig(columnConfig || {}); // Set column config from API
-        setColumns(apiColumns || Object.keys(data[0] || {}));
-
-        const statsTablesData = await fetchStatsTables(experimentName);
-        setStatsTables(statsTablesData);
-      } catch (error) {
-        console.error("Error loading data:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, []);
-
-  const experimentName = new URLSearchParams(window.location.search).get("experiment");
+  const rows = response?.data ?? [];
+  const visible = rows.filter(
+    (row) =>
+      (!filter || outcome(row) === filter) &&
+      [row.task_id, row.intent, row.site].some((value) =>
+        String(value ?? "")
+          .toLowerCase()
+          .includes(search.trim().toLowerCase()),
+      ),
+  );
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const activePage = Math.min(page, totalPages);
+  const shown = visible.slice((activePage - 1) * pageSize, activePage * pageSize);
 
   return (
-    <div className="App">
-      <div className="bg-gray-50 min-h-screen p-6">
-        <Header currentView="Dashboard" />
-        
-        {experimentName && (
-          <div
-            style={{
-              margin: "12px 0",
-              padding: "16px 20px",
-              backgroundColor: "#ffffff",
-              border: "1px solid #e5e7eb",
-              borderRadius: "10px",
-              boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.1)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <div
-                style={{
-                  width: "40px",
-                  height: "40px",
-                  backgroundColor: "#3b82f6",
-                  borderRadius: "8px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                </svg>
-              </div>
-              <div>
-                <div style={{ fontSize: "0.75rem", fontWeight: "600", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Experiment
-                </div>
-                <div style={{ fontSize: "1.125rem", fontWeight: "600", color: "#111827", marginTop: "2px" }}>
-                  {experimentName}
-                </div>
-              </div>
-            </div>
+    <>
+      <PageHeading
+        label={experiment ? "EXPERIMENT RESULTS" : "TRAJECTORY LOGS"}
+        title={experiment ?? "Task results"}
+        description="Review recorded outcomes and open a task to inspect the agent’s decisions."
+        actions={
+          experiment && (
+            <>
+              <BackLink to={back.to}>{back.label}</BackLink>
+              <Button asChild>
+                <Link to={comparisonPath([experiment])}>
+                  <GitCompareArrows /> Compare run
+                </Link>
+              </Button>
+            </>
+          )
+        }
+      />
+
+      {error ? (
+        <Card>
+          <EmptyState icon={CircleAlert} title="Results unavailable">
+            <p>Could not load results.csv for this run.</p>
+            <Button variant="outline" onClick={() => setVersion((value) => value + 1)}>
+              Try again
+            </Button>
+          </EmptyState>
+        </Card>
+      ) : !response ? (
+        <p role="status" className="loading-state">
+          Loading results…
+        </p>
+      ) : (
+        <>
+          <div className="metric-grid">
+            <Metric
+              icon={Layers3}
+              tone="amber"
+              label="Recorded tasks"
+              value={rows.length}
+              detail="Rows in this result set"
+            />
+            <Metric
+              icon={CheckCircle2}
+              tone="green"
+              label="Passed"
+              value={rows.filter((row) => outcome(row) === "Passed").length}
+              detail="Score 1 without an exception"
+            />
+            <Metric
+              icon={TriangleAlert}
+              tone="red"
+              label="Exceptions"
+              value={rows.filter((row) => outcome(row) === "Error").length}
+              detail="Tasks with a recorded exception"
+            />
+            <Metric
+              icon={Activity}
+              tone="neutral"
+              label="Avg. steps"
+              value={average(rows.map((row) => numberValue(row.num_steps)))}
+              detail="Across tasks with step counts"
+            />
           </div>
-        )}
-        
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            margin: "12px 0 16px 0",
-            padding: "10px 12px",
-            backgroundColor: "#f8fafc",
-            border: "1px solid #e5e7eb",
-            borderRadius: "8px",
-          }}
-        >
-          <button
-            onClick={() => navigate(-1)}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "8px 10px",
-              backgroundColor: "#fff",
-              border: "1px solid #d1d5db",
-              borderRadius: "6px",
-              cursor: "pointer",
-            }}
+          <Tabs
+            value={view}
+            onValueChange={(value) => update({ view: value === "fields" ? "fields" : "" }, true)}
+            className="results-tabs"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="15 18 9 12 15 6"></polyline>
-            </svg>
-            Back
-          </button>
-          <nav style={{ fontSize: "0.9rem", color: "#374151" }}>
-            <Link to="/" style={{ color: "#2563eb", textDecoration: "none" }}>Home</Link>
-            <span style={{ margin: "0 8px", color: "#9ca3af" }}>/</span>
-            <span>Dashboard</span>
-            {experimentName && (
-              <>
-                <span style={{ margin: "0 8px", color: "#9ca3af" }}>/</span>
-                <span>{experimentName}</span>
-              </>
-            )}
-          </nav>
-        </div>
-        <div className="max-w-9xl mx-auto">
-          {/* <h1 className="text-3xl font-bold text-gray-800 mb-8">Cuga Visualizer</h1> */}
-
-          {/* Accuracy Chart Section */}
-          {/* <div className="bg-white p-6 rounded-lg shadow-md mb-8"> */}
-          {/* <h2 className="text-xl font-semibold text-gray-700 mb-4">Accuracy Over Time</h2> */}
-
-          {/* <MyChart data={historyData} isLoading={isLoading} /> */}
-
-          {/* <StatsSection statsTables={statsTables} /> */}
-          {/* </div> */}
-
-          {/* Results Table Section */}
-          <ResultsTable
-            data={resultsData}
-            columns={columns}
-            isLoading={isLoading}
-            columnConfig={columnConfig} // Pass the column config here
-            experimentName={new URLSearchParams(window.location.search).get("experiment") || undefined}
-          />
-        </div>
-      </div>
-    </div>
+            <TabsList aria-label="Result views" variant="line">
+              <TabsTrigger value="tasks">Task overview</TabsTrigger>
+              <TabsTrigger value="fields">Recorded fields</TabsTrigger>
+            </TabsList>
+            <TabsContent value="tasks">
+              <Card className="run-library">
+                <div className="library-heading">
+                  <div>
+                    <h2>Tasks</h2>
+                    <p>Search by task ID, intent, or site.</p>
+                  </div>
+                  <Badge variant="secondary">{visible.length} results</Badge>
+                </div>
+                <div className="library-tools">
+                  <div className="search-field">
+                    <Search size={16} aria-hidden="true" />
+                    <Input
+                      aria-label="Search tasks"
+                      placeholder="Search tasks…"
+                      value={search}
+                      onChange={(event) => update({ q: event.target.value, page: "" }, true)}
+                    />
+                  </div>
+                  <label className="select-field">
+                    <ListFilter size={16} aria-hidden="true" />
+                    <select
+                      aria-label="Filter by outcome"
+                      value={filter}
+                      onChange={(event) => update({ outcome: event.target.value, page: "" }, true)}
+                    >
+                      <option value="">All outcomes</option>
+                      {outcomes.map((value) => (
+                        <option key={value}>{value}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {shown.length ? (
+                  <Table className="task-results-table" aria-label="Task results">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Task</TableHead>
+                        <TableHead>Intent</TableHead>
+                        <TableHead>Site</TableHead>
+                        <TableHead>Outcome</TableHead>
+                        <TableHead>Steps</TableHead>
+                        <TableHead>
+                          <span className="sr-only">Inspect</span>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {shown.map((row, index) => {
+                        const id = row.task_id == null ? null : String(row.task_id);
+                        const status = outcome(row);
+                        return (
+                          <TableRow key={`${id ?? "task"}-${index}`}>
+                            <TableCell className="font-mono">
+                              {id ? (
+                                <Link
+                                  className="table-link"
+                                  to={tracePath(id, experiment)}
+                                  state={{ resultsPath, resultsState: state }}
+                                >
+                                  {id}
+                                </Link>
+                              ) : (
+                                "—"
+                              )}
+                            </TableCell>
+                            <TableCell className="task-intent">{row.intent || "—"}</TableCell>
+                            <TableCell>{row.site || "—"}</TableCell>
+                            <TableCell>
+                              <Badge className={`status-pill ${outcomeTone[status]}`}>
+                                <i />
+                                {status === "Scored" ? `Score ${row.score}` : status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-mono">{row.num_steps ?? "—"}</TableCell>
+                            <TableCell>
+                              {id && (
+                                <Button asChild variant="ghost" size="icon-sm">
+                                  <Link
+                                    aria-label={`Inspect task ${id}`}
+                                    to={tracePath(id, experiment)}
+                                    state={{ resultsPath, resultsState: state }}
+                                  >
+                                    <ArrowRight />
+                                  </Link>
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <EmptyState
+                    icon={ListFilter}
+                    title={rows.length ? "No matching tasks" : "No tasks recorded"}
+                  >
+                    {rows.length ? (
+                      <Button variant="outline" onClick={() => update({ q: "", outcome: "", page: "" })}>
+                        Clear filters
+                      </Button>
+                    ) : (
+                      <p>Task results will appear when they are recorded.</p>
+                    )}
+                  </EmptyState>
+                )}
+                {totalPages > 1 && (
+                  <div className="library-footer">
+                    <span>
+                      Page {activePage} of {totalPages}
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={activePage <= 1}
+                        onClick={() => update({ page: String(activePage - 1) })}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={activePage >= totalPages}
+                        onClick={() => update({ page: String(activePage + 1) })}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            </TabsContent>
+            <TabsContent value="fields">
+              <Card className="recorded-fields">
+                <ResultsTable
+                  data={rows}
+                  columns={response.columns}
+                  columnConfig={response.columnConfig}
+                  experimentName={experiment}
+                  resultsPath={resultsPath}
+                />
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </>
+      )}
+    </>
   );
-};
-
-/**
- * Generates dummy history data for the chart
- */
-function generateHistoryData(startDate) {
-  const newDate = (date, increase) => {
-    const currentDate = new Date(date);
-    currentDate.setDate(date.getDate() + increase * 24);
-    return currentDate.toISOString();
-  };
-
-  return [
-    { timestamp: newDate(startDate, 2), accuracy: 0.12, sample_size: 15 },
-    { timestamp: newDate(startDate, 5), accuracy: 0.15, sample_size: 30 },
-    { timestamp: newDate(startDate, 4), accuracy: 0.22, sample_size: 44 },
-    { timestamp: newDate(startDate, 3), accuracy: 0.5, sample_size: 44 },
-    { timestamp: newDate(startDate, 5), accuracy: 0.65, sample_size: 44 },
-    { timestamp: newDate(startDate, 3), accuracy: 0.4, sample_size: 90 },
-    { timestamp: newDate(startDate, 4), accuracy: 0.5, sample_size: 90 },
-    { timestamp: newDate(startDate, 3), accuracy: 0.63, sample_size: 90 },
-    { timestamp: newDate(startDate, 5), accuracy: 0.38, sample_size: 812 },
-    { timestamp: newDate(startDate, 3), accuracy: 0.4, sample_size: 812 },
-    { timestamp: newDate(startDate, 5), accuracy: 0.41, sample_size: 812 },
-    { timestamp: newDate(startDate, 4), accuracy: 0.45, sample_size: 812 },
-    { timestamp: newDate(startDate, 5), accuracy: 0.5, sample_size: 812 },
-    { timestamp: newDate(startDate, 6), accuracy: 0.53, sample_size: 812 },
-    { timestamp: newDate(startDate, 8), accuracy: 0.55, sample_size: 812 },
-    { timestamp: newDate(startDate, 9), accuracy: 0.617, sample_size: 812 },
-  ];
 }
 
-export default ResultsDashboard;
+export default function Dashboard() {
+  const [params] = useSearchParams();
+  const experiment = params.get("experiment") || undefined;
+  return <RunResults key={experiment ?? ""} experiment={experiment} />;
+}
