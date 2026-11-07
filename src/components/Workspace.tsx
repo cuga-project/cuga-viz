@@ -173,7 +173,7 @@ export function EmptyState({
 }) {
   return (
     <div className="empty-state">
-      <span className="metric-icon amber">
+      <span className="metric-icon blue">
         <Icon size={20} />
       </span>
       <h2>{title}</h2>

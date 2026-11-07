@@ -74,9 +74,9 @@ function stepSummary(step: TraceStep, keys: string[] = []) {
 }
 
 function stepStyle(name: string) {
-  if (/plan|decompos|analyz|reason/i.test(name)) return { icon: GitBranch, tone: "amber" };
+  if (/plan|decompos|analyz|reason/i.test(name)) return { icon: GitBranch, tone: "blue" };
   if (/tool|api|code|action/i.test(name)) return { icon: Terminal, tone: "neutral" };
-  if (/answer|final/i.test(name)) return { icon: ScrollText, tone: "green" };
+  if (/answer|final/i.test(name)) return { icon: ScrollText, tone: "neutral" };
   return { icon: Braces, tone: "neutral" };
 }
 
@@ -245,7 +245,10 @@ export default function TrajectoryViewer() {
                                 <strong>{step.name}</strong>
                                 {summary && <small title={summary}>{summary}</small>}
                               </span>
-                              <span className="timeline-number">{String(index + 1).padStart(2, "0")}</span>
+                              <span className="timeline-step-position">
+                                <span className="timeline-number">{String(index + 1).padStart(2, "0")}</span>
+                                {active.index === index && <span className="timeline-step-state">Selected</span>}
+                              </span>
                             </button>
                           </li>
                         );

@@ -116,7 +116,7 @@ function RunResults({ experiment }: { experiment?: string }) {
           <div className="metric-grid">
             <Metric
               icon={Layers3}
-              tone="amber"
+              tone="blue"
               label="Recorded tasks"
               value={rows.length}
               detail="Rows in this result set"

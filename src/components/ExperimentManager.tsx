@@ -70,40 +70,40 @@ function TraceIllustration() {
     <svg className="hero-art" viewBox="0 0 480 208" fill="none" aria-hidden="true">
       <defs>
         <pattern id="trace-dots" width="16" height="16" patternUnits="userSpaceOnUse">
-          <circle cx="1" cy="1" r="1" fill="#dbe5cf" opacity=".2" />
+          <circle cx="1" cy="1" r="1" fill="var(--hero-subtle)" opacity=".2" />
         </pattern>
         <linearGradient id="trace-wash">
-          <stop stopColor="#222a1f" stopOpacity="0" />
-          <stop offset="1" stopColor="#8da16c" stopOpacity=".22" />
+          <stop stopColor="var(--hero)" stopOpacity="0" />
+          <stop offset="1" stopColor="var(--hero-guide)" stopOpacity=".22" />
         </linearGradient>
       </defs>
       <path d="M0 0h480v208H0z" fill="url(#trace-dots)" />
       <path d="M0 0h480v208H0z" fill="url(#trace-wash)" />
       <path
         d="M36 110h55q10 0 10-10V69q0-10 10-10h94q10 0 10 10v38q0 10 10 10h76q10 0 10-10V79q0-10 10-10h90"
-        stroke="#d7f18a"
+        stroke="var(--hero-accent)"
         strokeWidth="2"
       />
       <path
         d="M101 110v30q0 10 10 10h123q10 0 10 10v8q0 10 10 10h115"
-        stroke="#9aa889"
+        stroke="var(--hero-guide)"
         strokeDasharray="4 5"
       />
-      <path d="M311 113v30q0 10 10 10h108" stroke="#9aa889" strokeDasharray="4 5" />
-      <g fill="#283223" stroke="#d7f18a" strokeWidth="2">
+      <path d="M311 113v30q0 10 10 10h108" stroke="var(--hero-guide)" strokeDasharray="4 5" />
+      <g fill="var(--hero)" stroke="var(--hero-accent)" strokeWidth="2">
         <circle cx="101" cy="110" r="6" />
         <circle cx="215" cy="59" r="6" />
         <circle cx="311" cy="117" r="6" />
       </g>
-      <circle cx="411" cy="69" r="13" fill="#d7f18a" />
+      <circle cx="411" cy="69" r="13" fill="var(--hero-accent)" />
       <path
         d="m406 69 3 3 6-6"
-        stroke="#273119"
+        stroke="var(--hero)"
         strokeWidth="1.7"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <g fill="#c5d3b3" fontSize="10" fontFamily="monospace" letterSpacing="1">
+      <g fill="var(--hero-subtle)" fontSize="10" fontFamily="monospace" letterSpacing="1">
         <text x="112" y="91">
           PLAN
         </text>
@@ -332,7 +332,7 @@ export default function ExperimentManager({
       <div className="metric-grid">
         <Metric
           icon={FlaskConical}
-          tone="amber"
+          tone="blue"
           label="Experiments"
           value={data?.pagination.total_items ?? "—"}
           detail={search ? "Matching your search" : "Recorded in this workspace"}

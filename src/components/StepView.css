@@ -1,20 +1,20 @@
 /* Color theme constants as CSS variables */
 .step-container, .step-payload {
-  --color-primary: #344329;
-  --color-primary-light: #4b6036;
-  --color-secondary: #64748b;
-  --color-accent: #8b5cf6;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
+  --color-primary: var(--link);
+  --color-primary-light: var(--primary);
+  --color-secondary: var(--muted-foreground);
+  --color-accent: var(--hero);
+  --color-success: var(--success-ink);
+  --color-warning: var(--warning-ink);
   --color-background-black: #22232e;
-  --color-background: #f8f9f5;
+  --color-background: var(--chrome);
   --color-background-dark: #1e293b;
-  --color-border: #e5e7df;
-  --color-text: #334155;
-  --color-text-light: #64748b;
-  --color-highlight: #fef3c7;
-  --color-interesting-bg: #f1f5ea;
-  --color-interesting-border: #dde7d3;
+  --color-border: var(--border);
+  --color-text: var(--foreground);
+  --color-text-light: var(--muted-foreground);
+  --color-highlight: var(--warning-bg);
+  --color-interesting-bg: var(--chrome);
+  --color-interesting-border: var(--selection-border);
 
   /* JSON Viewer specific colors */
   --json-string-color: #047857; /* green-700 */
@@ -33,7 +33,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 15px 20px;
-  background: #f8f9f4;
+  background: var(--muted);
   border-bottom: 1px solid var(--border);
 }
 
@@ -54,8 +54,8 @@
 
 /* Current URL */
 .current-url-container {
-  background-color: var(--color-highlight);
-  border: 1px solid var(--color-warning);
+  background-color: var(--accent);
+  border: 1px solid var(--selection-border);
   padding: 12px;
   border-radius: 8px;
   margin-bottom: 16px;
@@ -63,7 +63,7 @@
 
 .current-url-label {
   font-weight: 600;
-  color: #795719;
+  color: var(--link);
   margin-bottom: 4px;
   font-size: 13px;
   display: flex;
@@ -123,23 +123,23 @@
 .markdown-content :is(ol, ul) { padding-left: 1.6em; }
 .markdown-content ol { list-style: decimal; }
 .markdown-content ul { list-style: disc; }
-.markdown-content a { color: #456331; text-decoration: underline; }
+.markdown-content a { color: var(--link); text-decoration: underline; }
 .markdown-content blockquote { border-left: 3px solid var(--border); padding-left: .75em; }
 .markdown-content :is(th, td) { padding: .25em .5em; border: 1px solid var(--border); }
 
 /* Interesting Keys */
 .interesting-keys-container {
   margin-top: 20px;
-  border: 2px solid var(--color-interesting-border);
+  border: 1px solid var(--color-interesting-border);
   border-radius: 12px;
   overflow: hidden;
   background-color: var(--color-interesting-bg);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
 }
 
 .interesting-keys-header {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
-  color: white;
+  background: var(--selection);
+  color: var(--link);
+  border-bottom: 1px solid var(--selection-border);
   padding: 16px;
   display: flex;
   justify-content: space-between;
