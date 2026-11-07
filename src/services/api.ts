@@ -34,23 +34,24 @@ export async function fetchDataTable(experimentName?: string, signal?: AbortSign
 
     const jsonResponse = await response.json();
 
-    // API can now return an object with data, columnConfig, and columns
-    // Or handle legacy API that only returns an array of data
-    if (Array.isArray(jsonResponse)) {
-      // Legacy API response - just data array
-      return {
-        data: jsonResponse,
-        columns: [...new Set<string>(jsonResponse.flatMap(Object.keys))],
-        columnConfig: {}, // No column config in this case
-      };
-    } else {
-      // New API response format with both data and column config
-      return {
-        data: jsonResponse.data || [],
-        columns: jsonResponse.columns || [...new Set<string>((jsonResponse.data || []).flatMap(Object.keys))],
-        columnConfig: jsonResponse.columnConfig || {},
-      };
-    }
+    // Older servers return rows directly. Newer servers also supply column metadata.
+    const legacy = Array.isArray(jsonResponse);
+    const rows: unknown = legacy ? jsonResponse : jsonResponse.data ?? [];
+    if (!Array.isArray(rows)) throw new Error("Invalid result rows.");
+
+    const data = rows.map((row: unknown): ResultRow => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("Invalid result row.");
+      // The tables render scalar cells. Preserve structured legacy fields as readable JSON.
+      return Object.fromEntries(Object.entries(row).map(([column, value]) => [
+        column,
+        value !== null && typeof value === "object" ? JSON.stringify(value) : value,
+      ]));
+    });
+    return {
+      data,
+      columns: (legacy ? undefined : jsonResponse.columns) ?? [...new Set(data.flatMap(Object.keys))],
+      columnConfig: legacy ? {} : jsonResponse.columnConfig ?? {},
+    };
   } catch (error) {
     if (!signal?.aborted) console.error("Error in fetchDataTable:", error);
     throw error;

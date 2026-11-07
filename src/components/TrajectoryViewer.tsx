@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { useLocation, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import {
   Activity,
   Braces,
@@ -80,8 +80,7 @@ function stepStyle(name: string) {
   return { icon: Braces, tone: "neutral" };
 }
 
-export default function TrajectoryViewer() {
-  const { taskId = "", experiment } = useParams();
+export default function TrajectoryViewer({ taskId, experiment }: { taskId: string; experiment?: string }) {
   const { state } = useLocation();
   const back = state?.comparisonPath
     ? { to: state.comparisonPath, label: "Back to comparison" }
@@ -95,6 +94,10 @@ export default function TrajectoryViewer() {
   const [version, setVersion] = useState(0);
 
   useEffect(() => {
+    if (!taskId) {
+      setError("No task ID was provided.");
+      return;
+    }
     const controller = new AbortController();
     setError("");
     const configuration = fetchConfig().catch(() => ({}));
@@ -152,7 +155,7 @@ export default function TrajectoryViewer() {
     <>
       <PageHeading
         label="TRACE INSPECTOR"
-        title={`Task ${taskId}`}
+        title={taskId ? `Task ${taskId}` : "Trace inspector"}
         description="Follow the agent’s recorded actions, inputs, and observations."
         actions={
           <BackLink to={back.to} state={state?.resultsState}>

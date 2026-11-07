@@ -10,7 +10,7 @@ import {
 import { Link, NavLink, Outlet, useLocation, useMatch, useSearchParams } from "react-router-dom";
 import type { ReactNode } from "react";
 import { maxComparisonRuns } from "../utils/results";
-import { dashboardPath, comparisonPath } from "../utils/routes";
+import { dashboardPath, comparisonPath, useTraceAddress } from "../utils/routes";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 
@@ -19,11 +19,9 @@ export function Workspace({ selected }: { selected: string[] }) {
   const isHome = Boolean(useMatch("/"));
   const isDashboard = Boolean(useMatch("/dashboard"));
   const isComparison = Boolean(useMatch("/compare"));
-  const experimentTrace = useMatch("/trajectories/:experiment/:taskId");
-  const standaloneTrace = useMatch("/trajectories/:taskId");
-  const trace = experimentTrace ?? standaloneTrace;
+  const trace = useTraceAddress();
   const [params] = useSearchParams();
-  const experiment = experimentTrace?.params.experiment ?? params.get("experiment") ?? undefined;
+  const experiment = trace ? trace.experiment : params.get("experiment") || undefined;
   const compareSelection = selected.length <= maxComparisonRuns ? selected : [];
   const isStandalone = (isDashboard || trace) && !experiment;
 
@@ -99,7 +97,7 @@ export function Workspace({ selected }: { selected: string[] }) {
             {trace && (
               <>
                 <ChevronRight />
-                <span aria-current="page">Task {trace.params.taskId}</span>
+                <span aria-current="page">{trace.taskId ? `Task ${trace.taskId}` : "Trace inspector"}</span>
               </>
             )}
           </nav>

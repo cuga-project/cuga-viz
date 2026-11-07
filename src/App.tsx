@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import TrajectoryViewer from "./components/TrajectoryViewer";
 import ResultsDashboard from "./components/Dashboard";
 import ExperimentManager from "./components/ExperimentManager";
 import CompareExperiments from "./components/CompareExperiments";
 import { Workspace } from "./components/Workspace";
+import { useTraceAddress } from "./utils/routes";
 
 function TraceRoute() {
-  const { pathname } = useLocation();
-  return <TrajectoryViewer key={pathname} />;
+  const { taskId = "", experiment } = useTraceAddress() ?? {};
+  return <TrajectoryViewer key={JSON.stringify([experiment, taskId])} taskId={taskId} experiment={experiment} />;
 }
 
 function App() {
@@ -23,6 +24,7 @@ function App() {
           <Route path="/compare" element={<CompareExperiments />} />
           <Route path="/dashboard" element={<ResultsDashboard />} />
           <Route path="/trajectories/:experiment/:taskId" element={<TraceRoute />} />
+          <Route path="/trajectories" element={<TraceRoute />} />
           <Route path="/trajectories/:taskId" element={<TraceRoute />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
